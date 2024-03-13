@@ -4,32 +4,39 @@ import random
 
 SCREEN_HEIGHT = 1280
 SCREEN_WIDTH = 720
+FRAMERATE = 24
+
 NUM_BOIDS = 100
-SPEED_INIT = 15
-SPEED_MAX = 15
+SPEED_INIT = 10
+SPEED_MAX = 12
 SPEED_MIN = 3
 
-FACTOR_MATCHING_NEARBY_VEL = 0.1
-FACTOR_CENTERING = 0.1
-FACTOR_AVOID = 0.01
-MIN_AVOID_DISTANCE = 15
-SIGHT_RANGE = 70
+FACTOR_MATCHING_NEARBY_VEL = 0.05
+FACTOR_CENTERING = 0.05
+FACTOR_AVOID = 0.15
+MIN_AVOID_DISTANCE = 10
+SIGHT_RANGE = 60
 
 pygame.init()
 screen = pygame.display.set_mode((SCREEN_HEIGHT, SCREEN_WIDTH))
-clock = pygame.time.Clock();
+clock = pygame.time.Clock()
 running = True
 
-# initial list of boids
+# initi list of boids
 # TODO switch back to sprite group
 boids = []
+
+# initialize boid sprite PyGame Surface
+init_triangle = pygame.Surface([15,10])
+init_triangle.set_colorkey('black')
+pygame.draw.polygon(init_triangle, 'red', [[0,0], [15,5], [0,10]])     # initially points in direction (1,0)
 
 # TODO: obstacles
 
 def init_boids():
     for i in range(NUM_BOIDS):
         pos = pygame.Vector2(random.randint(0, SCREEN_WIDTH), random.randint(0, SCREEN_HEIGHT))
-        vel = pygame.Vector2(random.randint(0, SPEED_MAX), random.randint(0, SPEED_MAX))
+        vel = pygame.Vector2(random.randint(-SPEED_MAX, SPEED_MAX), random.randint(-SPEED_MAX, SPEED_MAX))
         b = Boid(pos, vel)
         boids.append(b)
     return
@@ -43,12 +50,18 @@ def move_boids_new_positions(boids):
 
     for b in boids:
         v1 = flyToCenter(b)
-        v2 = noCrashing(b)
+        v2 = avoidOtherBoids(b)
         v2 = matchNearbyVel(b)
 
-        b.vel += v1 + v2 + v3
+        v1adj = pygame.Vector2(v1.x, -v1.y)
+        v2adj = pygame.Vector2(v2.x, -v2.y)
+        v3adj = pygame.Vector2(v3.x, -v3.y)
+
+        b.vel += v1adj + v2adj + v3adj
         limitVel(b)
-        b.pos += b.vel
+        b.update_boid_heading()
+        b.pos.x += b.vel.x
+        b.pos.y -= b.vel.y
 
         # Pacman border
         if b.pos.x > 1280:
@@ -60,9 +73,11 @@ def move_boids_new_positions(boids):
         if b.pos.y > 720:
             b.pos.y -= 720    
 
-        print(f'x,y: {b.pos.x},{b.pos.y}')
-        print(f'angle: {b.angle}')
-        b.update()
+        print(f'x: {b.pos.x} | y: {b.pos.y}')
+        print(f'vel x: {b.vel.x} | vel y: {b.vel.y}')
+
+        print(f'angle {b.heading}')
+    
 
 # Rules
 def flyToCenter(b):
@@ -83,7 +98,7 @@ def flyToCenter(b):
 
     return (center - b.pos) * FACTOR_CENTERING
 
-def noCrashing(b):
+def avoidOtherBoids(b):
 
     # Direction vector
     c = pygame.Vector2((0,0))
@@ -93,11 +108,14 @@ def noCrashing(b):
         if (bd != b):
             dist = pygame.Vector2(b.pos - bd.pos)
             if (abs(dist.length()) < MIN_AVOID_DISTANCE):
-                c += (b.pos - bd.pos)
+                c += -(b.pos - bd.pos)
 
     return c * FACTOR_AVOID
 
 def matchNearbyVel(b):
+    if (NUM_BOIDS <= 1):
+        return pygame.Vector2(0,0)
+    
     # Percieved Velocity Vector
     vPV = pygame.Vector2()
 
@@ -120,27 +138,23 @@ def limitVel(b):
 
 
 class Boid(pygame.sprite.Sprite):
+    # TODO Fix negaive/positive y coordiates when calculating velocity
     def __init__(self, pos, vel):
         pygame.sprite.Sprite.__init__(self)
 
         self.pos = pos
         self.vel = vel
-        # TODO heading <== angle
-        self.angle = -math.degrees(math.atan2(vel.y, vel.x)) - 45     # calculates angle from vel & conv to degrees
 
-        image = pygame.image.load("darwizzy.png")
-        self.image = pygame.transform.scale_by(image, 0.05)
-        #self.image = pygame.Surface([15,10], pygame.SRCALPHA).convert()
-        #self.image.fill('red')
-        self.rect = self.image.get_rect(center = (pos.x, pos.y))
+        # Set Sprite image as Triangle
+        # Heading - point boid in direction of vel vector
+        self.heading = math.degrees(math.atan2(vel.y, vel.x))               # calculates angle from vel & conv to degrees
+        self.image = pygame.transform.rotate(init_triangle.convert_alpha(), self.heading)
+        self.rect = self.image.get_rect(center = (pos.x, pos.y))            # sets boid's center
 
-    # TODO fix angle rotation
-    def update(self):
-        self.angle = -math.degrees(math.atan2(self.vel.y, self.vel.x)) - 90
-        dangle =  (-math.degrees(math.atan2(self.vel.y, self.vel.x)) - 90) - self.angle
-        self.image = pygame.transform.rotate(self.image, dangle)
-
-        self.rect.center = (self.pos.x, self.pos.y)
+    def update_boid_heading(self):
+        self.heading = math.degrees(math.atan2(self.vel.y, self.vel.x))
+        self.image = pygame.transform.rotate(init_triangle.convert_alpha(), self.heading)
+        self.rect = self.image.get_rect(center = (self.pos.x, self.pos.y))
 
         print('updated!')
 
@@ -167,6 +181,6 @@ while(running):
     pygame.display.flip()
     
     # Set FPS
-    dt = clock.tick(30)
+    dt = clock.tick(FRAMERATE)
 
 pygame.quit()
