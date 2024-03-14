@@ -6,16 +6,18 @@ SCREEN_HEIGHT = 1280
 SCREEN_WIDTH = 720
 FRAMERATE = 24
 
-NUM_BOIDS = 100
-SPEED_INIT = 10
-SPEED_MAX = 12
-SPEED_MIN = 3
+NUM_BOIDS = 50
+SPEED_INIT = 7
+SPEED_MAX = 9
+SPEED_MIN = 2
 
-FACTOR_MATCHING_NEARBY_VEL = 0.05
+FACTOR_NOISE = 0.05
 FACTOR_CENTERING = 0.05
+FACTOR_MATCHING_NEARBY_VEL = 0.02
 FACTOR_AVOID = 0.15
-MIN_AVOID_DISTANCE = 10
-SIGHT_RANGE = 60
+MAX_AVOID_DISTANCE = 100
+MAX_CENTERING_DISTANCE = 40
+
 
 pygame.init()
 screen = pygame.display.set_mode((SCREEN_HEIGHT, SCREEN_WIDTH))
@@ -32,6 +34,7 @@ init_triangle.set_colorkey('black')
 pygame.draw.polygon(init_triangle, 'red', [[0,0], [15,5], [0,10]])     # initially points in direction (1,0)
 
 # TODO: obstacles
+# TODO: add random variation 
 
 def init_boids():
     for i in range(NUM_BOIDS):
@@ -56,8 +59,9 @@ def move_boids_new_positions(boids):
         v1adj = pygame.Vector2(v1.x, -v1.y)
         v2adj = pygame.Vector2(v2.x, -v2.y)
         v3adj = pygame.Vector2(v3.x, -v3.y)
+        v4adj = randomNoise()
 
-        b.vel += v1adj + v2adj + v3adj
+        b.vel += v1adj + v2adj + v3adj + v4adj
         limitVel(b)
         b.update_boid_heading()
         b.pos.x += b.vel.x
@@ -89,26 +93,32 @@ def flyToCenter(b):
     for bd in boids:
         if (bd != b):
             dist = pygame.Vector2(b.pos - bd.pos)
-            if (abs(dist.length()) < SIGHT_RANGE):
+            if (abs(dist.magnitude()) < MAX_CENTERING_DISTANCE):
                 center += bd.pos
                 num_neighbors += 1
 
     if num_neighbors > 0:
         center = center / num_neighbors
 
+    # TODO Use num_neighbors to change boid color based on how many boids are in their flock
+
     return (center - b.pos) * FACTOR_CENTERING
 
 def avoidOtherBoids(b):
-
+    # TODO Change boid field of view to only 135° in front of boid
+    # TODO Boids cluster too close to other boids
     # Direction vector
     c = pygame.Vector2((0,0))
 
     # Turn in cumulative opposite direction of all other near boids
     for bd in boids:
         if (bd != b):
-            dist = pygame.Vector2(b.pos - bd.pos)
-            if (abs(dist.length()) < MIN_AVOID_DISTANCE):
-                c += -(b.pos - bd.pos)
+            distVec = pygame.Vector2(bd.pos - b.pos)    # vector from b to bd
+            dist = distVec.magnitude()                  # distance from b to other(bd)
+            if (dist > 0 and dist < MAX_AVOID_DISTANCE):
+                distNorm = distVec.normalize()
+                distNorm /= dist              # weight by the distance between points (closer==stronger)
+                c += -distVec
 
     return c * FACTOR_AVOID
 
@@ -135,7 +145,9 @@ def limitVel(b):
         b.vel = (b.vel / b.vel.magnitude())  * SPEED_MIN
     return
 
-
+def randomNoise():
+    vector = pygame.Vector2(random.random()*2-1, random.random()*2-1)      # generates random x & y between [-1,1)
+    return vector * FACTOR_NOISE
 
 class Boid(pygame.sprite.Sprite):
     # TODO Fix negaive/positive y coordiates when calculating velocity
